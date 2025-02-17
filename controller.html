@@ -44,6 +44,9 @@
     .toggle-container {
       margin: 20px;
     }
+    .color-picker {
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
@@ -79,6 +82,7 @@
       <button class="color-button" style="background-color: #000000;" data-color="#000000"></button>
       <button class="color-button" style="background-color: #a984fa;" data-color="#a984fa"></button>
     </div>
+    <input type="color" class="color-picker" id="colorPicker1" value="#ff0000">
   </div>
 
   <div class="website-section">
@@ -94,6 +98,7 @@
       <button class="color-button" style="background-color: #000000;" data-color="#000000"></button>
       <button class="color-button" style="background-color: #a984fa;" data-color="#a984fa"></button>
     </div>
+    <input type="color" class="color-picker" id="colorPicker2" value="#ff0000">
   </div>
 
   <div class="volume-display">
@@ -219,29 +224,38 @@
         button.addEventListener('click', (event) => {
           const color = event.target.dataset.color;
           console.log(`Sending color ${color} to ${targetId}`);
-
-          // Send the color to the specific target website
-          if (linkToggle.checked) {
-            // If linked, send color to both websites
-            const targetIds = ['website1', 'website2'];
-            targetIds.forEach(id => {
-              socket.send(JSON.stringify({
-                type: 'color',
-                targetId: id,
-                color: color,
-              }));
-            });
-          } else {
-            // Send color to the specific website
-            socket.send(JSON.stringify({
-              type: 'color',
-              targetId: targetId,
-              color: color,
-            }));
-          }
+          sendColor(targetId, color);
         });
       });
+
+      const colorPicker = document.getElementById(`colorPicker${targetId === 'website1' ? '1' : '2'}`);
+      colorPicker.addEventListener('input', (event) => {
+        const color = event.target.value;
+        console.log(`Sending color ${color} to ${targetId}`);
+        sendColor(targetId, color);
+      });
     });
+
+    function sendColor(targetId, color) {
+      if (linkToggle.checked) {
+        // If linked, send color to both websites
+        const targetIds = ['website1', 'website2'];
+        targetIds.forEach(id => {
+          socket.send(JSON.stringify({
+            type: 'color',
+            targetId: id,
+            color: color,
+          }));
+        });
+      } else {
+        // Send color to the specific website
+        socket.send(JSON.stringify({
+          type: 'color',
+          targetId: targetId,
+          color: color,
+        }));
+      }
+    }
   </script>
 </body>
 </html>
