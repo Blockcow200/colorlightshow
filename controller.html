@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Color Controller</title>
+  <title>Audio-Controlled Lighting</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -15,10 +15,17 @@
       margin: 0;
       background-color: #f0f0f0;
     }
+    .upload-section {
+      margin-bottom: 20px;
+    }
+    .volume-display {
+      margin-top: 20px;
+      font-size: 1.2em;
+    }
     .color-buttons {
       display: flex;
       gap: 10px;
-      margin-bottom: 20px;
+      margin: 20px 0;
     }
     .color-button {
       width: 50px;
@@ -40,10 +47,22 @@
   </style>
 </head>
 <body>
+  <div class="upload-section">
+    <label for="audio-upload">Upload Audio File:</label>
+    <input type="file" id="audio-upload" accept="audio/*">
+    <button id="playButton" disabled>Play Audio</button>
+    <button id="pauseButton" disabled>Pause Audio</button>
+    <button id="stopButton" disabled>Stop Audio</button>
+  </div>
+
   <div class="toggle-container">
     <label>
       <input type="checkbox" id="linkToggle">
       Link Website 1 and 2
+    </label>
+    <label>
+      <input type="checkbox" id="bwToggle">
+      Black & White Visualization
     </label>
   </div>
 
@@ -72,32 +91,163 @@
       <button class="color-button" style="background-color: #00ffff;" data-color="#00ffff"></button>
       <button class="color-button" style="background-color: #ffffff;" data-color="#ffffff"></button>
       <button class="color-button" style="background-color: #000000;" data-color="#000000"></button>
-
-
     </div>
+  </div>
+
+  <div class="volume-display">
+    Volume: <span id="volume-level">0</span>
   </div>
 
   <script>
     const socket = new WebSocket('wss://colour-project.glitch.me/');
+    const audioUpload = document.getElementById('audio-upload');
+    const volumeLevel = document.getElementById('volume-level');
     const colorButtonGroups = document.querySelectorAll('.color-buttons');
     const linkToggle = document.getElementById('linkToggle');
+    const bwToggle = document.getElementById('bwToggle');
+    const playButton = document.getElementById('playButton');
+    const pauseButton = document.getElementById('pauseButton');
+    const stopButton = document.getElementById('stopButton');
 
+    let audioContext, analyser, source, dataArray;
+    let isButtonPressed = false; // Flag for button press
+    let isAnalyzing = false; // Flag for volume analysis
+    let lastColorSentTime = 0; // Track the last time color was sent
+
+    // Set up the Web Audio API
+    function setupAudioContext(audioFile) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      const fileReader = new FileReader();
+      fileReader.onload = function (e) {
+        audioContext.decodeAudioData(e.target.result, (buffer) => {
+          source = audioContext.createBufferSource();
+          source.buffer = buffer;
+          source.connect(analyser);
+          analyser.connect(audioContext.destination);
+
+          // Enable the play button after loading the audio
+          playButton.disabled = false;
+          stopButton.disabled = false;
+          pauseButton.disabled = false;
+
+          // Start analyzing when audio plays
+          playButton.onclick = () => {
+            source.start(0);
+            isAnalyzing = true; // Start analyzing when audio plays
+            analyzeVolume();
+          };
+
+          // Pause the audio
+          pauseButton.onclick = () => {
+            if (audioContext.state === 'running') {
+              audioContext.suspend();
+              pauseButton.textContent = 'Resume Audio';
+              isAnalyzing = false; // Stop color changes
+            } else if (audioContext.state === 'suspended') {
+              audioContext.resume();
+              pauseButton.textContent = 'Pause Audio';
+              isAnalyzing = true; // Resume color changes
+              analyzeVolume(); // Resume volume analysis
+            }
+          };
+
+          // Stop the audio
+          stopButton.onclick = () => {
+            source.stop();
+            isAnalyzing = false; // Stop analyzing when audio is stopped
+            volumeLevel.textContent = '0'; // Reset volume display
+          };
+        });
+      };
+      fileReader.readAsArrayBuffer(audioFile);
+    }
+
+    // Analyze the audio volume and send color updates sporadically
+    function analyzeVolume() {
+      if (!isAnalyzing) return; // Stop if not analyzing
+      requestAnimationFrame(analyzeVolume);
+      analyser.getByteFrequencyData(dataArray);
+
+      // Calculate the average volume
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+      }
+      const averageVolume = sum / dataArray.length;
+      volumeLevel.textContent = averageVolume.toFixed(2);
+
+      // Generate color based on black and white toggle
+      let color;
+      if (bwToggle.checked) {
+        const grayscale = Math.floor((averageVolume / 255) * 255); // Map volume to 0-255
+        color = `rgb(${grayscale}, ${grayscale}, ${grayscale})`; // Black and white
+      } else {
+        // Generate random RGB values for color
+        const red = Math.floor(Math.random() * 256);
+        const green = Math.floor(Math.random() * 256);
+        const blue = Math.floor(Math.random() * 256);
+        color = `rgb(${red}, ${green}, ${blue})`; // RGB color
+      }
+
+      // Send the color to both target websites sporadically
+      const currentTime = Date.now();
+      if (currentTime - lastColorSentTime > Math.random() * 1000 + 500) { // Random interval between 500ms to 1500ms
+        sendColorToWebsites(color);
+        lastColorSentTime = currentTime;
+      }
+    }
+
+    // Send the color to both target websites
+    function sendColorToWebsites(color) {
+      const targetIds = ['website1', 'website2'];
+      targetIds.forEach(targetId => {
+        socket.send(JSON.stringify({
+          type: 'color',
+          targetId: targetId,
+          color: color,
+        }));
+      });
+    }
+
+    // Handle audio file upload
+    audioUpload.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        setupAudioContext(file);
+      }
+    });
+
+    // Color button functionality
     colorButtonGroups.forEach(group => {
       const targetId = group.dataset.target;
-      
+
       group.querySelectorAll('.color-button').forEach(button => {
         button.addEventListener('click', (event) => {
+          isButtonPressed = true; // Set flag when a button is pressed
           const color = event.target.dataset.color;
           console.log(`Sending color ${color} to ${targetId}`);
 
-          // If linked, send color to both websites
+          // Send the color to the specific target website
           if (linkToggle.checked) {
-            socket.send(JSON.stringify({ type: 'color', targetId: 'website1', color: color }));
-            socket.send(JSON.stringify({ type: 'color', targetId: 'website2', color: color }));
+            // If linked, send color to both websites
+            sendColorToWebsites(color);
           } else {
-            // Send the color and target ID to the specific website
-            socket.send(JSON.stringify({ type: 'color', targetId: targetId, color: color }));
+            // Send color to the specific website
+            socket.send(JSON.stringify({
+              type: 'color',
+              targetId: targetId,
+              color: color,
+            }));
           }
+
+          // Reset the button pressed flag after a longer delay
+          setTimeout(() => {
+            isButtonPressed = false;
+          }, 3000); // Set the timeout to 3000ms (3 seconds)
         });
       });
     });
