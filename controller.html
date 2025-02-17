@@ -100,9 +100,7 @@
     const stopButton = document.getElementById('stopButton');
 
     let audioContext, analyser, source, dataArray;
-    let isButtonPressed = false; // Flag for button press
-    let isAnalyzing = false; // Flag for volume analysis
-    let lastColorSentTime = 0; // Track the last time color was sent
+    let isAnalyzing = false;
 
     // Set up the Web Audio API
     function setupAudioContext(audioFile) {
@@ -127,7 +125,7 @@
           // Start analyzing when audio plays
           playButton.onclick = () => {
             source.start(0);
-            isAnalyzing = true; // Start analyzing when audio plays
+            isAnalyzing = true;
             analyzeVolume();
           };
 
@@ -136,29 +134,29 @@
             if (audioContext.state === 'running') {
               audioContext.suspend();
               pauseButton.textContent = 'Resume Audio';
-              isAnalyzing = false; // Stop color changes
+              isAnalyzing = false;
             } else if (audioContext.state === 'suspended') {
               audioContext.resume();
               pauseButton.textContent = 'Pause Audio';
-              isAnalyzing = true; // Resume color changes
-              analyzeVolume(); // Resume volume analysis
+              isAnalyzing = true;
+              analyzeVolume();
             }
           };
 
           // Stop the audio
           stopButton.onclick = () => {
             source.stop();
-            isAnalyzing = false; // Stop analyzing when audio is stopped
-            volumeLevel.textContent = '0'; // Reset volume display
+            isAnalyzing = false;
+            volumeLevel.textContent = '0';
           };
         });
       };
       fileReader.readAsArrayBuffer(audioFile);
     }
 
-    // Analyze the audio volume and send color updates sporadically
+    // Analyze the audio volume and send color updates
     function analyzeVolume() {
-      if (!isAnalyzing) return; // Stop if not analyzing
+      if (!isAnalyzing) return;
       requestAnimationFrame(analyzeVolume);
       analyser.getByteFrequencyData(dataArray);
 
@@ -173,26 +171,16 @@
       // Generate color based on black and white toggle
       let color;
       if (bwToggle.checked) {
-        const grayscale = Math.floor((averageVolume / 255) * 255); // Map volume to 0-255
-        color = `rgb(${grayscale}, ${grayscale}, ${grayscale})`; // Black and white
+        const grayscale = Math.floor((averageVolume / 255) * 255);
+        color = `rgb(${grayscale}, ${grayscale}, ${grayscale})`;
       } else {
-        // Generate random RGB values for color
         const red = Math.floor(Math.random() * 256);
         const green = Math.floor(Math.random() * 256);
         const blue = Math.floor(Math.random() * 256);
-        color = `rgb(${red}, ${green}, ${blue})`; // RGB color
+        color = `rgb(${red}, ${green}, ${blue})`;
       }
 
-      // Send the color to both target websites sporadically
-      const currentTime = Date.now();
-      if (currentTime - lastColorSentTime > Math.random() * 1000 + 500) { // Random interval between 500ms to 1500ms
-        sendColorToWebsites(color);
-        lastColorSentTime = currentTime;
-      }
-    }
-
-    // Send the color to both target websites
-    function sendColorToWebsites(color) {
+      // Send the color to both target websites
       const targetIds = ['website1', 'website2'];
       targetIds.forEach(targetId => {
         socket.send(JSON.stringify({
@@ -217,14 +205,20 @@
 
       group.querySelectorAll('.color-button').forEach(button => {
         button.addEventListener('click', (event) => {
-          isButtonPressed = true; // Set flag when a button is pressed
           const color = event.target.dataset.color;
           console.log(`Sending color ${color} to ${targetId}`);
 
           // Send the color to the specific target website
           if (linkToggle.checked) {
             // If linked, send color to both websites
-            sendColorToWebsites(color);
+            const targetIds = ['website1', 'website2'];
+            targetIds.forEach(id => {
+              socket.send(JSON.stringify({
+                type: 'color',
+                targetId: id,
+                color: color,
+              }));
+            });
           } else {
             // Send color to the specific website
             socket.send(JSON.stringify({
@@ -233,11 +227,6 @@
               color: color,
             }));
           }
-
-          // Reset the button pressed flag after a longer delay
-          setTimeout(() => {
-            isButtonPressed = false;
-          }, 3000); // Set the timeout to 3000ms (3 seconds)
         });
       });
     });
