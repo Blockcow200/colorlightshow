@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Color Controller</title>
+</head>
+<body>
+  <input type="color" id="colorPicker">
+  <script>
+    const socket = new WebSocket('wss://colour-project.glitch.me/');
+    const colorPicker = document.getElementById('colorPicker');
+
+    colorPicker.addEventListener('input', (event) => {
+      const color = event.target.value;
+      console.log('Sending color:', color);
+      socket.send(color);
+    });
+  </script>
+</body>
+</html>
