@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Audio-Controlled Lighting</title>
+  <title>Bass-Controlled Lighting</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -18,7 +18,7 @@
     .upload-section {
       margin-bottom: 20px;
     }
-    .volume-display {
+    .bass-display {
       margin-top: 20px;
       font-size: 1.2em;
     }
@@ -43,9 +43,6 @@
     }
     .toggle-container {
       margin: 20px;
-    }
-    .color-picker {
-      margin-top: 10px;
     }
   </style>
 </head>
@@ -75,40 +72,26 @@
       <button class="color-button" style="background-color: #ff0000;" data-color="#ff0000"></button>
       <button class="color-button" style="background-color: #00ff00;" data-color="#00ff00"></button>
       <button class="color-button" style="background-color: #0000ff;" data-color="#0000ff"></button>
-      <button class="color-button" style="background-color: #ffff00;" data-color="#ffff00"></button>
-      <button class="color-button" style="background-color: #ff00ff;" data-color="#ff00ff"></button>
-      <button class="color-button" style="background-color: #00ffff;" data-color="#00ffff"></button>
-      <button class="color-button" style="background-color: #ffffff;" data-color="#ffffff"></button>
-      <button class="color-button" style="background-color: #000000;" data-color="#000000"></button>
-      <button class="color-button" style="background-color: #a984fa;" data-color="#a984fa"></button>
     </div>
-    <input type="color" class="color-picker" id="colorPicker1" value="#ff0000">
   </div>
 
   <div class="website-section">
     <h3>Control Website 2</h3>
     <div class="color-buttons" data-target="website2">
-      <button class="color-button" style="background-color: #ff0000;" data-color="#ff0000"></button>
-      <button class="color-button" style="background-color: #00ff00;" data-color="#00ff00"></button>
-      <button class="color-button" style="background-color: #0000ff;" data-color="#0000ff"></button>
       <button class="color-button" style="background-color: #ffff00;" data-color="#ffff00"></button>
       <button class="color-button" style="background-color: #ff00ff;" data-color="#ff00ff"></button>
       <button class="color-button" style="background-color: #00ffff;" data-color="#00ffff"></button>
-      <button class="color-button" style="background-color: #ffffff;" data-color="#ffffff"></button>
-      <button class="color-button" style="background-color: #000000;" data-color="#000000"></button>
-      <button class="color-button" style="background-color: #a984fa;" data-color="#a984fa"></button>
     </div>
-    <input type="color" class="color-picker" id="colorPicker2" value="#ff0000">
   </div>
 
-  <div class="volume-display">
-    Volume: <span id="volume-level">0</span>
+  <div class="bass-display">
+    Bass Amplitude: <span id="bass-level">0</span>
   </div>
 
   <script>
     const socket = new WebSocket('wss://colour-project.glitch.me/');
     const audioUpload = document.getElementById('audio-upload');
-    const volumeLevel = document.getElementById('volume-level');
+    const bassLevel = document.getElementById('bass-level');
     const colorButtonGroups = document.querySelectorAll('.color-buttons');
     const linkToggle = document.getElementById('linkToggle');
     const bwToggle = document.getElementById('bwToggle');
@@ -123,7 +106,7 @@
     function setupAudioContext(audioFile) {
       audioContext = new (window.AudioContext || window.webkitAudioContext)();
       analyser = audioContext.createAnalyser();
-      analyser.fftSize = 256;
+      analyser.fftSize = 2048; // Increase FFT size for better frequency resolution
       dataArray = new Uint8Array(analyser.frequencyBinCount);
 
       const fileReader = new FileReader();
@@ -143,7 +126,7 @@
           playButton.onclick = () => {
             source.start(0);
             isAnalyzing = true;
-            analyzeVolume();
+            analyzeBass();
           };
 
           // Pause the audio
@@ -156,7 +139,7 @@
               audioContext.resume();
               pauseButton.textContent = 'Pause Audio';
               isAnalyzing = true;
-              analyzeVolume();
+              analyzeBass();
             }
           };
 
@@ -164,38 +147,39 @@
           stopButton.onclick = () => {
             source.stop();
             isAnalyzing = false;
-            volumeLevel.textContent = '0';
+            bassLevel.textContent = '0';
           };
         });
       };
       fileReader.readAsArrayBuffer(audioFile);
     }
 
-    // Analyze the audio volume and send color updates
-    function analyzeVolume() {
+    // Analyze the bass frequencies and send color updates
+    function analyzeBass() {
       if (!isAnalyzing) return;
-      requestAnimationFrame(analyzeVolume);
+      requestAnimationFrame(analyzeBass);
       analyser.getByteFrequencyData(dataArray);
 
-      // Calculate the average volume
-      let sum = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        sum += dataArray[i];
-      }
-      const averageVolume = sum / dataArray.length;
-      volumeLevel.textContent = averageVolume.toFixed(2);
+      // Define the frequency range for bass (e.g., 20–200 Hz)
+      const bassStart = 20; // Start of bass range (Hz)
+      const bassEnd = 200; // End of bass range (Hz)
+      const sampleRate = audioContext.sampleRate;
+      const fftSize = analyser.fftSize;
 
-      // Generate color based on black and white toggle
-      let color;
-      if (bwToggle.checked) {
-        const grayscale = Math.floor((averageVolume / 255) * 255);
-        color = `rgb(${grayscale}, ${grayscale}, ${grayscale})`;
-      } else {
-        const red = Math.floor(Math.random() * 256);
-        const green = Math.floor(Math.random() * 256);
-        const blue = Math.floor(Math.random() * 256);
-        color = `rgb(${red}, ${green}, ${blue})`;
+      // Calculate the frequency bin range for bass
+      const bassStartBin = Math.floor((bassStart * fftSize) / sampleRate);
+      const bassEndBin = Math.floor((bassEnd * fftSize) / sampleRate);
+
+      // Calculate the average amplitude of the bass frequencies
+      let bassSum = 0;
+      for (let i = bassStartBin; i <= bassEndBin; i++) {
+        bassSum += dataArray[i];
       }
+      const bassAverage = bassSum / (bassEndBin - bassStartBin + 1);
+      bassLevel.textContent = bassAverage.toFixed(2);
+
+      // Map bass amplitude to a color
+      const color = mapBassToColor(bassAverage);
 
       // Send the color to both target websites
       const targetIds = ['website1', 'website2'];
@@ -206,6 +190,21 @@
           color: color,
         }));
       });
+    }
+
+    // Map bass amplitude to a color
+    function mapBassToColor(bassAmplitude) {
+      if (bwToggle.checked) {
+        // Black and white visualization
+        const grayscale = Math.floor((bassAmplitude / 255) * 255); // Map amplitude to 0-255
+        return `rgb(${grayscale}, ${grayscale}, ${grayscale})`;
+      } else {
+        // Color visualization based on bass amplitude
+        const red = Math.floor((bassAmplitude / 255) * 255); // Red intensity based on bass
+        const green = 0; // No green for bass
+        const blue = 0; // No blue for bass
+        return `rgb(${red}, ${green}, ${blue})`;
+      }
     }
 
     // Handle audio file upload
@@ -224,38 +223,29 @@
         button.addEventListener('click', (event) => {
           const color = event.target.dataset.color;
           console.log(`Sending color ${color} to ${targetId}`);
-          sendColor(targetId, color);
-        });
-      });
 
-      const colorPicker = document.getElementById(`colorPicker${targetId === 'website1' ? '1' : '2'}`);
-      colorPicker.addEventListener('input', (event) => {
-        const color = event.target.value;
-        console.log(`Sending color ${color} to ${targetId}`);
-        sendColor(targetId, color);
+          // Send the color to the specific target website
+          if (linkToggle.checked) {
+            // If linked, send color to both websites
+            const targetIds = ['website1', 'website2'];
+            targetIds.forEach(id => {
+              socket.send(JSON.stringify({
+                type: 'color',
+                targetId: id,
+                color: color,
+              }));
+            });
+          } else {
+            // Send color to the specific website
+            socket.send(JSON.stringify({
+              type: 'color',
+              targetId: targetId,
+              color: color,
+            }));
+          }
+        });
       });
     });
-
-    function sendColor(targetId, color) {
-      if (linkToggle.checked) {
-        // If linked, send color to both websites
-        const targetIds = ['website1', 'website2'];
-        targetIds.forEach(id => {
-          socket.send(JSON.stringify({
-            type: 'color',
-            targetId: id,
-            color: color,
-          }));
-        });
-      } else {
-        // Send color to the specific website
-        socket.send(JSON.stringify({
-          type: 'color',
-          targetId: targetId,
-          color: color,
-        }));
-      }
-    }
   </script>
 </body>
 </html>
