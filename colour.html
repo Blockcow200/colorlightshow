@@ -3,55 +3,32 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Video Display</title>
+  <title>Color Control Website 1</title>
   <style>
     body {
       margin: 0;
       height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      background-color: #000;
-    }
-    #video-display {
-      max-width: 100%;
-      max-height: 100%;
+      transition: background-color 0.1s;
     }
   </style>
 </head>
 <body>
-  <video id="video-display"></video>
-
   <script>
     const socket = new WebSocket('wss://colour-project.glitch.me/');
-    const videoDisplay = document.getElementById('video-display');
 
-    // Register this display
+    // Register this website with its ID
     socket.addEventListener('open', () => {
       socket.send(JSON.stringify({
         type: 'register',
-        id: 'website1'
+        id: 'website1', // Unique ID for this website
       }));
     });
 
     // Handle incoming messages
     socket.addEventListener('message', (event) => {
-      const data = JSON.parse(event.data);
-      
-      if (data.type === 'video') {
-        videoDisplay.src = data.url;
-      } 
-      else if (data.type === 'video-control') {
-        if (data.action === 'play') videoDisplay.play();
-        else if (data.action === 'pause') videoDisplay.pause();
-        else if (data.action === 'stop') {
-          videoDisplay.pause();
-          videoDisplay.currentTime = 0;
-        }
-      }
-      else if (data.type === 'color') {
-        document.body.style.backgroundColor = data.color;
-      }
+      const color = event.data;
+      console.log('Website 1: Message received:', color);
+      document.body.style.backgroundColor = color;
     });
   </script>
 </body>
