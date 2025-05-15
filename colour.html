@@ -16,18 +16,19 @@
   <script>
     const socket = new WebSocket('wss://colour-project.glitch.me/');
 
+    // Register this website with its ID
     socket.addEventListener('open', () => {
       socket.send(JSON.stringify({
         type: 'register',
-        id: 'website1',
+        id: 'website1', // Unique ID for this website
       }));
     });
 
+    // Handle incoming messages
     socket.addEventListener('message', (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'color') {
-        document.body.style.backgroundColor = data.color;
-      }
+      const color = event.data;
+      console.log('Website 1: Message received:', color);
+      document.body.style.backgroundColor = color;
     });
   </script>
 </body>
