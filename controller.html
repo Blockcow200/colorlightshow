@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Video & Audio Controller</title>
+  <title>Bass-Controlled Lighting</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -17,27 +17,15 @@
     }
     .upload-section {
       margin-bottom: 20px;
-      text-align: center;
     }
-    .video-preview {
-      margin: 20px 0;
-      max-width: 400px;
-      max-height: 225px;
-    }
-    .controls {
-      margin: 20px 0;
-    }
-    button {
-      padding: 8px 16px;
-      margin: 0 5px;
-      cursor: pointer;
+    .bass-display {
+      margin-top: 20px;
+      font-size: 1.2em;
     }
     .color-buttons {
       display: flex;
       gap: 10px;
       margin: 20px 0;
-      flex-wrap: wrap;
-      justify-content: center;
     }
     .color-button {
       width: 50px;
@@ -52,7 +40,6 @@
     }
     .website-section {
       margin: 20px;
-      text-align: center;
     }
     .toggle-container {
       margin: 20px;
@@ -61,14 +48,11 @@
 </head>
 <body>
   <div class="upload-section">
-    <label for="video-upload">Upload Video File:</label>
-    <input type="file" id="video-upload" accept="video/*">
-    <div class="controls">
-      <button id="playButton" disabled>Play</button>
-      <button id="pauseButton" disabled>Pause</button>
-      <button id="stopButton" disabled>Stop</button>
-    </div>
-    <video id="video-preview" class="video-preview" controls></video>
+    <label for="audio-upload">Upload Audio File:</label>
+    <input type="file" id="audio-upload" accept="audio/*">
+    <button id="playButton" disabled>Play Audio</button>
+    <button id="pauseButton" disabled>Pause Audio</button>
+    <button id="stopButton" disabled>Stop Audio</button>
   </div>
 
   <div class="toggle-container">
@@ -116,8 +100,7 @@
 
   <script>
     const socket = new WebSocket('wss://colour-project.glitch.me/');
-    const videoUpload = document.getElementById('video-upload');
-    const videoPreview = document.getElementById('video-preview');
+    const audioUpload = document.getElementById('audio-upload');
     const bassLevel = document.getElementById('bass-level');
     const colorButtonGroups = document.querySelectorAll('.color-buttons');
     const linkToggle = document.getElementById('linkToggle');
@@ -128,64 +111,134 @@
 
     let audioContext, analyser, source, dataArray;
     let isAnalyzing = false;
-    let currentVideoUrl = null;
 
-    // Handle video file upload
-    videoUpload.addEventListener('change', (event) => {
+    // Set up the Web Audio API
+    function setupAudioContext(audioFile) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048; // Increase FFT size for better frequency resolution
+      dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      const fileReader = new FileReader();
+      fileReader.onload = function (e) {
+        audioContext.decodeAudioData(e.target.result, (buffer) => {
+          source = audioContext.createBufferSource();
+          source.buffer = buffer;
+          source.connect(analyser);
+          analyser.connect(audioContext.destination);
+
+          // Enable the play button after loading the audio
+          playButton.disabled = false;
+          stopButton.disabled = false;
+          pauseButton.disabled = false;
+
+          // Start analyzing when audio plays
+          playButton.onclick = () => {
+            source.start(0);
+            isAnalyzing = true;
+            analyzeBass();
+          };
+
+          // Pause the audio
+          pauseButton.onclick = () => {
+            if (audioContext.state === 'running') {
+              audioContext.suspend();
+              pauseButton.textContent = 'Resume Audio';
+              isAnalyzing = false;
+            } else if (audioContext.state === 'suspended') {
+              audioContext.resume();
+              pauseButton.textContent = 'Pause Audio';
+              isAnalyzing = true;
+              analyzeBass();
+            }
+          };
+
+          // Stop the audio
+          stopButton.onclick = () => {
+            source.stop();
+            isAnalyzing = false;
+            bassLevel.textContent = '0';
+          };
+        });
+      };
+      fileReader.readAsArrayBuffer(audioFile);
+    }
+
+    // Analyze the bass frequencies and send color updates
+    function analyzeBass() {
+      if (!isAnalyzing) return;
+      requestAnimationFrame(analyzeBass);
+      analyser.getByteFrequencyData(dataArray);
+
+      // Define the frequency range for bass (e.g., 20–200 Hz)
+      const bassStart = 20; // Start of bass range (Hz)
+      const bassEnd = 200; // End of bass range (Hz)
+      const sampleRate = audioContext.sampleRate;
+      const fftSize = analyser.fftSize;
+
+      // Calculate the frequency bin range for bass
+      const bassStartBin = Math.floor((bassStart * fftSize) / sampleRate);
+      const bassEndBin = Math.floor((bassEnd * fftSize) / sampleRate);
+
+      // Calculate the average amplitude of the bass frequencies
+      let bassSum = 0;
+      for (let i = bassStartBin; i <= bassEndBin; i++) {
+        bassSum += dataArray[i];
+      }
+      const bassAverage = bassSum / (bassEndBin - bassStartBin + 1);
+      bassLevel.textContent = bassAverage.toFixed(2);
+
+      // Map bass amplitude to a color
+      const color = mapBassToColor(bassAverage);
+
+      // Send the color to both target websites
+      const targetIds = ['website1', 'website2'];
+      targetIds.forEach(targetId => {
+        socket.send(JSON.stringify({
+          type: 'color',
+          targetId: targetId,
+          color: color,
+        }));
+      });
+    }
+
+    // Map bass amplitude to a color
+    function mapBassToColor(bassAmplitude) {
+      if (bwToggle.checked) {
+        // Black and white visualization
+        const grayscale = Math.floor((bassAmplitude / 255) * 255); // Map amplitude to 0-255
+        return `rgb(${grayscale}, ${grayscale}, ${grayscale})`;
+      } else {
+        // Color visualization based on bass amplitude
+        const red = Math.floor((bassAmplitude / 255) * 255); // Red intensity based on bass
+        const green = 0; // No green for bass
+        const blue = 0; // No blue for bass
+        return `rgb(${red}, ${green}, ${blue})`;
+      }
+    }
+
+    // Handle audio file upload
+    audioUpload.addEventListener('change', (event) => {
       const file = event.target.files[0];
       if (file) {
-        currentVideoUrl = URL.createObjectURL(file);
-        videoPreview.src = currentVideoUrl;
-        playButton.disabled = false;
-        pauseButton.disabled = false;
-        stopButton.disabled = false;
-        
-        // Send video URL to all clients
-        socket.send(JSON.stringify({
-          type: 'video',
-          url: currentVideoUrl
-        }));
+        setupAudioContext(file);
       }
     });
-
-    // Control buttons
-    playButton.addEventListener('click', () => {
-      videoPreview.play();
-      socket.send(JSON.stringify({ type: 'video-control', action: 'play' }));
-    });
-
-    pauseButton.addEventListener('click', () => {
-      videoPreview.pause();
-      socket.send(JSON.stringify({ type: 'video-control', action: 'pause' }));
-    });
-
-    stopButton.addEventListener('click', () => {
-      videoPreview.pause();
-      videoPreview.currentTime = 0;
-      socket.send(JSON.stringify({ type: 'video-control', action: 'stop' }));
-    });
-
-    // Audio analysis functions (keep your existing audio code here)
-    function setupAudioContext(audioFile) {
-      /* ... your existing audio setup code ... */
-    }
-
-    function analyzeBass() {
-      /* ... your existing bass analysis code ... */
-    }
-
-    function mapBassToColor(bassAmplitude) {
-      /* ... your existing color mapping code ... */
-    }
 
     // Color button functionality
     colorButtonGroups.forEach(group => {
       const targetId = group.dataset.target;
+
       group.querySelectorAll('.color-button').forEach(button => {
         button.addEventListener('click', (event) => {
           const color = event.target.dataset.color;
+          console.log(`Sending color ${color} to ${targetId}`);
+
+          // Send the color to the specific target website
           if (linkToggle.checked) {
-            ['website1', 'website2'].forEach(id => {
+            // If linked, send color to both websites
+            const targetIds = ['website1', 'website2'];
+            targetIds.forEach(id => {
               socket.send(JSON.stringify({
                 type: 'color',
                 targetId: id,
@@ -193,6 +246,7 @@
               }));
             });
           } else {
+            // Send color to the specific website
             socket.send(JSON.stringify({
               type: 'color',
               targetId: targetId,
